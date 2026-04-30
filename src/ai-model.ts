@@ -75,6 +75,7 @@ export async function callModel(prompt: string): Promise<string> {
           model: openai(openaiModel),
           prompt,
           maxOutputTokens: 32768,
+          providerOptions: { openai: { reasoningEffort: 'minimal' } },
         });
         lastModelUsed = `OpenAI ${openaiModel}`;
         return text;

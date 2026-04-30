@@ -117,37 +117,28 @@ export async function classifyWithLLM(
   const uniqueDescs = [...new Set(transactions.map(t => t.description))];
   console.log(`  Classifying ${uniqueDescs.length} unrecognized transaction(s) with AI...`);
 
-  const prompt = `Classify each Israeli bank transaction description into exactly one category.
+  // Index-keyed output is much more compact than echoing each description back
+  const prompt = `Classify Israeli bank transaction descriptions into one of these categories:
+living | salary | savings | donation | freelance_income | freelance_expense | investment | investment_fee | loan | reimbursement | transfer | credit_card_aggregate | atm | not_personal
 
-Categories:
-- living: personal expense (food, groceries, shopping, restaurants, transport, health, entertainment, bills, subscriptions, etc.)
-- salary: salary or wage deposit
-- savings: savings plan or standing order for savings
-- donation: charitable donation
-- freelance_income: freelance or side-job payment received
-- freelance_expense: business expense (accountant, cloud services, etc.)
-- investment: securities, mutual funds, FX, pension fund
-- investment_fee: brokerage fee, securities tax
-- loan: personal loan given or received
-- reimbursement: money received back from friends
-- transfer: internal transfer between own accounts
-- credit_card_aggregate: bank debit for total credit card bill
-- atm: ATM cash withdrawal
-- not_personal: business entity transaction
+Default to "living" for personal expenses (food, shopping, restaurants, transport, health, entertainment, bills, subscriptions).
 
-Respond with ONLY a JSON object mapping each description to its category. No explanation.
+Output ONLY a JSON object mapping the line number to the category. Example: {"1":"living","2":"salary"}.
 
 Transactions:
-${uniqueDescs.map((d, i) => `${i + 1}. "${d}"`).join('\n')}`;
+${uniqueDescs.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
 
   try {
     const response = await callModel(prompt);
-    const cleaned = response.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    const cleaned = response.replace(/```(?:json|yaml|yml)?\n?/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(cleaned);
 
-    for (const [desc, category] of Object.entries(parsed)) {
-      const cat = String(category);
-      results.set(desc, VALID_CATEGORIES.includes(cat) ? cat : 'living');
+    for (const [key, category] of Object.entries(parsed)) {
+      const idx = parseInt(key, 10) - 1;
+      if (idx >= 0 && idx < uniqueDescs.length) {
+        const cat = String(category);
+        results.set(uniqueDescs[idx], VALID_CATEGORIES.includes(cat) ? cat : 'living');
+      }
     }
   } catch (err: any) {
     console.warn(`  ⚠ LLM classification failed: ${err.message}. Defaulting unclassified to "living".`);
