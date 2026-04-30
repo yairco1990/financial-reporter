@@ -81,20 +81,31 @@ jobs:
 
       - name: Commit and push state changes
         working-directory: state
+        timeout-minutes: 3
+        env:
+          GIT_TERMINAL_PROMPT: '0'
         run: |
           git config user.name "Financial Reporter"
           git config user.email "agent@financial-reporter"
+          # Use the default branch name (don't hard-code 'main')
+          BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          echo "Branch: $BRANCH"
+
           git add -A
           if git diff --cached --quiet; then
             echo "No state changes to commit"
             exit 0
           fi
           git commit -m "agent: ${{ inputs.mode }} run $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          # Pull any remote changes (e.g. user edited config.json) and rebase our commit on top
+
           for i in 1 2 3; do
-            git pull --rebase origin main && git push && exit 0
-            echo "Push attempt $i failed, retrying..."
-            sleep 2
+            echo "Push attempt $i..."
+            if git pull --rebase --no-edit origin "$BRANCH" 2>&1 && git push origin "$BRANCH" 2>&1; then
+              echo "✓ Pushed successfully"
+              exit 0
+            fi
+            echo "Push attempt $i failed, retrying in 3s..."
+            sleep 3
           done
-          echo "Push failed after 3 attempts"
+          echo "❌ Push failed after 3 attempts"
           exit 1
