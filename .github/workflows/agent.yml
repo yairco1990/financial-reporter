@@ -1,0 +1,93 @@
+name: Financial Reporter Agent (reusable)
+
+# Reusable workflow. Each user's state repo calls this from its own workflow.
+# The state repo is checked out into ./state, this code repo into ./code.
+# The agent runs against ./state and the workflow commits any changes back.
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: 'daily | monthly | annual | process-splits'
+        type: string
+        default: 'daily'
+      arg:
+        description: 'YYYY-MM (for monthly/annual)'
+        type: string
+        default: ''
+      ref:
+        description: 'Code repo ref to use (default: main)'
+        type: string
+        default: 'main'
+    secrets:
+      GCP_SA_KEY:
+        description: 'Optional GCP service account JSON for splits processing'
+        required: false
+      SPLITS_INBOX_FOLDER_ID:
+        description: 'Optional Drive folder ID for split screenshots'
+        required: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout state repo (your data)
+        uses: actions/checkout@v4
+        with:
+          path: state
+
+      - name: Checkout code repo (the agent)
+        uses: actions/checkout@v4
+        with:
+          repository: yairco1990/financial-reporter
+          ref: ${{ inputs.ref }}
+          path: code
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: code/package-lock.json
+
+      - name: Install dependencies
+        working-directory: code
+        run: npm ci
+
+      - name: Build
+        working-directory: code
+        run: npm run build
+
+      - name: Write optional GCP service account key
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [ -n "$GCP_SA_KEY" ]; then
+            echo "$GCP_SA_KEY" > /tmp/gcp-key.json
+            echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-key.json" >> "$GITHUB_ENV"
+            echo "  ✓ GCP key written"
+          else
+            echo "  (no GCP key — splits processing disabled)"
+          fi
+
+      - name: Run agent
+        working-directory: code
+        env:
+          STATE_REPO_PATH: ${{ github.workspace }}/state
+          SPLITS_INBOX_FOLDER_ID: ${{ secrets.SPLITS_INBOX_FOLDER_ID }}
+        run: node build/financial-agent.js ${{ inputs.mode }} ${{ inputs.arg }}
+
+      - name: Commit and push state changes
+        working-directory: state
+        run: |
+          git config user.name "Financial Reporter"
+          git config user.email "agent@financial-reporter"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No state changes to commit"
+          else
+            git commit -m "agent: ${{ inputs.mode }} run $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            git push
+          fi

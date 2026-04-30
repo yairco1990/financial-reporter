@@ -1,0 +1,49 @@
+{
+  "user": {
+    "name": "Your Name"
+  },
+  "banks": [
+    {
+      "name": "Discount",
+      "bankId": "discount",
+      "credentials": {
+        "id": "YOUR_TZ_NUMBER",
+        "num": "YOUR_ACCOUNT_NUM",
+        "password": "YOUR_PASSWORD"
+      }
+    },
+    {
+      "name": "VisaCal",
+      "bankId": "visaCal",
+      "credentials": {
+        "username": "YOUR_USERNAME",
+        "password": "YOUR_PASSWORD"
+      }
+    },
+    {
+      "name": "Isracard",
+      "bankId": "isracard",
+      "credentials": {
+        "id": "YOUR_TZ_NUMBER",
+        "card6Digits": "LAST_6_DIGITS",
+        "password": "YOUR_PASSWORD"
+      }
+    }
+  ],
+  "ai": {
+    "geminiApiKey": "AIza...",
+    "openaiApiKey": "sk-...",
+    "models": {
+      "gemini": "gemini-2.5-pro",
+      "openai": "gpt-5"
+    }
+  },
+  "email": {
+    "gmailAppPassword": "xxxx xxxx xxxx xxxx",
+    "from": "you@gmail.com",
+    "to": "you@gmail.com"
+  },
+  "portfolio": {
+    "bank": "Discount"
+  }
+}

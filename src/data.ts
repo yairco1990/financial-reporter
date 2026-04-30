@@ -1,0 +1,292 @@
+/**
+ * Data processing — transforms raw transactions into structured monthly and daily reports.
+ *
+ * This module handles classification (including LLM fallback for unrecognized
+ * transactions) and pure computation. Every function receives its data as
+ * arguments and returns results — no global state.
+ *
+ * Key functions:
+ * - buildMonthData()  → Full month summary (income, expenses, categories, merchants, etc.)
+ * - buildDailyData()  → Day-level view with budget pacing and month-over-month comparison
+ */
+
+import { Transaction, CategoryTotal, MerchantTotal } from './types';
+import { classifyTransaction, classifyWithLLM } from './classifier';
+import { callModel } from './ai-model';
+import { getSplitAdjustments } from './scrapers/splits';
+
+// --- Helpers ---
+
+/** Filter transactions to a date range (inclusive) */
+export function filterByDate(txns: Transaction[], start: string, end: string): Transaction[] {
+  return txns.filter(t => t.date >= start && t.date <= end + 'T23:59:59');
+}
+
+/** Group transactions by category and sum amounts */
+export function getCategoryTotals(txns: Transaction[]): CategoryTotal[] {
+  const cats: Record<string, { total: number; count: number }> = {};
+  for (const t of txns) {
+    const cat = t.category || 'ללא קטגוריה';
+    if (!cats[cat]) cats[cat] = { total: 0, count: 0 };
+    cats[cat].total += t.amount;
+    cats[cat].count++;
+  }
+  return Object.entries(cats)
+    .map(([category, d]) => ({ category, total: Math.round(d.total), count: d.count }))
+    .sort((a, b) => a.total - b.total);
+}
+
+/** Group transactions by merchant name and sum amounts */
+export function getMerchantTotals(txns: Transaction[], limit = 15): MerchantTotal[] {
+  const merchants: Record<string, { total: number; count: number }> = {};
+  for (const t of txns) {
+    if (!merchants[t.description]) merchants[t.description] = { total: 0, count: 0 };
+    merchants[t.description].total += t.amount;
+    merchants[t.description].count++;
+  }
+  return Object.entries(merchants)
+    .map(([merchant, d]) => ({ merchant, total: Math.round(d.total), visits: d.count }))
+    .sort((a, b) => a.total - b.total)
+    .slice(0, limit);
+}
+
+/**
+ * Classify all transactions, using LLM for any that rules can't match.
+ * Returns a map of transaction description → category.
+ */
+async function classifyAll(txns: Transaction[]): Promise<Map<string, string>> {
+  const classificationMap = new Map<string, string>();
+  const unclassified: Transaction[] = [];
+
+  for (const t of txns) {
+    const cls = classifyTransaction(t);
+    if (cls === 'unclassified') {
+      if (!classificationMap.has(t.description)) {
+        unclassified.push(t);
+      }
+    } else {
+      classificationMap.set(t.description, cls);
+    }
+  }
+
+  if (unclassified.length > 0) {
+    const llmResults = await classifyWithLLM(unclassified, callModel);
+    for (const [desc, cat] of llmResults) {
+      classificationMap.set(desc, cat);
+    }
+  }
+
+  return classificationMap;
+}
+
+/** Look up classification for a transaction from the pre-built map */
+function getClass(t: Transaction, classMap: Map<string, string>): string {
+  return classMap.get(t.description) || 'living';
+}
+
+// --- Month Data Builder ---
+
+/**
+ * Build a complete financial summary for a given month.
+ *
+ * Classifies every transaction (rules + LLM fallback), then computes:
+ * - Income breakdown (salary, freelance, reimbursements)
+ * - Living expense breakdown by category and merchant
+ * - Savings standing orders
+ * - Investment activity (purchases, sales, fees)
+ * - Notable large transactions
+ * - Split payment adjustments from Bit/PayBox screenshots
+ */
+export async function buildMonthData(transactions: Transaction[], month: string) {
+  const [year, mon] = month.split('-').map(Number);
+  const lastDay = new Date(year, mon, 0).getDate();
+  const startDate = `${month}-01`;
+  const endDate = `${month}-${lastDay}`;
+
+  const txns = filterByDate(transactions, startDate, endDate);
+
+  // Classify all transactions (rules + LLM for unknowns)
+  const classMap = await classifyAll(txns);
+
+  // Group transactions by classification
+  const classified: Record<string, Transaction[]> = {};
+  for (const t of txns) {
+    const cls = getClass(t, classMap);
+    if (!classified[cls]) classified[cls] = [];
+    classified[cls].push(t);
+  }
+  const get = (key: string) => classified[key] || [];
+
+  // --- Living expenses ---
+  const livingExpenses = [...get('living').filter(t => t.amount < 0), ...get('donation'), ...get('atm')];
+
+  const categoryTotals = getCategoryTotals(livingExpenses);
+  const merchantTotals = getMerchantTotals(livingExpenses);
+
+  // --- Per-category transaction breakdown ---
+  const categoryBreakdown: Record<string, { date: string; description: string; amount: number; source: string }[]> = {};
+  for (const t of livingExpenses) {
+    const cat = t.category || 'ללא קטגוריה';
+    if (!categoryBreakdown[cat]) categoryBreakdown[cat] = [];
+    categoryBreakdown[cat].push({
+      date: t.date.substring(0, 10),
+      description: t.description,
+      amount: Math.round(t.amount),
+      source: t.source,
+    });
+  }
+
+  // --- Income ---
+  const salary = get('salary').reduce((s, t) => s + t.amount, 0);
+  const freelanceIncome = get('freelance_income').reduce((s, t) => s + t.amount, 0);
+  const reimbursements = get('reimbursement').reduce((s, t) => s + t.amount, 0);
+
+  // --- Savings ---
+  const totalSavings = Math.round(get('savings').reduce((s, t) => s + t.amount, 0));
+
+  // --- Expense totals ---
+  const totalLivingExpenses = Math.round(livingExpenses.reduce((s, t) => s + t.amount, 0));
+  const totalFreelanceExpenses = Math.round(get('freelance_expense').reduce((s, t) => s + t.amount, 0));
+
+  // --- Investment activity ---
+  const investmentTxns = [...get('investment'), ...get('investment_fee')];
+  const investmentPurchases = investmentTxns.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0);
+  const investmentSales = investmentTxns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+  const investmentFees = get('investment_fee').reduce((s, t) => s + t.amount, 0);
+
+  // --- Notable transactions (> ₪500) ---
+  const notable = livingExpenses
+    .filter(t => Math.abs(t.amount) > 500)
+    .sort((a, b) => a.amount - b.amount)
+    .slice(0, 10);
+
+  // --- Split adjustments (friend reimbursements from Bit/PayBox screenshots) ---
+  const splits = getSplitAdjustments(month);
+
+  return {
+    month, startDate, endDate,
+    totalTransactions: txns.length,
+    income: {
+      salary: Math.round(salary),
+      freelance: Math.round(freelanceIncome),
+      reimbursements: Math.round(reimbursements),
+      total: Math.round(salary + freelanceIncome),
+    },
+    expenses: {
+      living: totalLivingExpenses,
+      freelance: totalFreelanceExpenses,
+      total: totalLivingExpenses + totalFreelanceExpenses,
+    },
+    savings: totalSavings,
+    surplus: Math.round(salary + freelanceIncome + totalLivingExpenses + totalFreelanceExpenses),
+    categories: categoryTotals,
+    categoryBreakdown,
+    merchants: merchantTotals,
+    donations: Math.round(get('donation').reduce((s, t) => s + t.amount, 0)),
+    investment: {
+      purchases: Math.round(investmentPurchases),
+      sales: Math.round(investmentSales),
+      fees: Math.round(investmentFees),
+      transactions: investmentTxns.map(t => ({
+        date: t.date.substring(0, 10), description: t.description, amount: Math.round(t.amount),
+      })),
+    },
+    notable: notable.map(t => ({
+      date: t.date.substring(0, 10), source: t.source,
+      description: t.description, amount: Math.round(t.amount), category: t.category,
+    })),
+    loans: get('loan').map(t => ({
+      date: t.date.substring(0, 10), description: t.description, amount: Math.round(t.amount),
+    })),
+    splits,
+    splitsTotal: splits.reduce((s, a) => s + a.adjustment, 0),
+  };
+}
+
+// --- Daily Data Builder ---
+
+/**
+ * Build daily report data for a specific date.
+ *
+ * Compares current month spending against the previous month at the same
+ * day, calculates per-category budget pacing (high/ok/good), and predicts
+ * end-of-month total based on current rate.
+ */
+export async function buildDailyData(transactions: Transaction[], today: string) {
+  const currentMonth = today.substring(0, 7);
+  const [year, mon] = currentMonth.split('-').map(Number);
+  const lastDay = new Date(year, mon, 0).getDate();
+  const currentDay = parseInt(today.substring(8, 10));
+  const daysLeft = lastDay - currentDay;
+
+  const prevMonth = mon === 1
+    ? `${year - 1}-12`
+    : `${year}-${String(mon - 1).padStart(2, '0')}`;
+  const prevMonthSameDay = `${prevMonth}-${String(
+    Math.min(currentDay, new Date(year, mon - 1, 0).getDate())
+  ).padStart(2, '0')}`;
+
+  // Classify all transactions once for both months
+  const allRelevantTxns = filterByDate(transactions, `${prevMonth}-01`, today);
+  const classMap = await classifyAll(allRelevantTxns);
+
+  // Yesterday's living/atm/donation transactions
+  const todayTxns = filterByDate(transactions, today, today)
+    .filter(t => {
+      const c = getClass(t, classMap);
+      return c === 'living' || c === 'atm' || c === 'donation';
+    })
+    .map(t => ({
+      description: t.description, amount: Math.round(t.amount),
+      category: t.category, source: t.source,
+    }));
+
+  // Full month summaries
+  const monthData = await buildMonthData(transactions, currentMonth);
+  const prevData = await buildMonthData(transactions, prevMonth);
+
+  // Previous month spending up to the same day
+  const prevMonthToSameDay = filterByDate(transactions, `${prevMonth}-01`, prevMonthSameDay);
+  const prevLivingToDay = prevMonthToSameDay
+    .filter(t => {
+      const c = getClass(t, classMap);
+      return (c === 'living' && t.amount < 0) || c === 'atm' || c === 'donation';
+    })
+    .reduce((s, t) => s + t.amount, 0);
+
+  // Per-category budget pacing
+  const pace = monthData.categories.map(cat => {
+    const prevCat = prevData.categories.find(c => c.category === cat.category);
+    const monthlyAvg = prevCat ? prevCat.total : cat.total;
+    const remaining = daysLeft > 0
+      ? Math.round((Math.abs(monthlyAvg) - Math.abs(cat.total)) / daysLeft)
+      : 0;
+
+    const expectedRate = Math.abs(monthlyAvg) * (currentDay / lastDay);
+    const paceStatus = Math.abs(cat.total) > expectedRate * 1.15
+      ? 'high'
+      : Math.abs(cat.total) < expectedRate * 0.85
+        ? 'good'
+        : 'ok';
+
+    return {
+      ...cat,
+      prevMonthTotal: prevCat?.total || 0,
+      dailyBudgetRemaining: remaining,
+      pace: paceStatus,
+    };
+  });
+
+  return {
+    today, currentMonth, currentDay, daysInMonth: lastDay, daysLeft,
+    todayTransactions: todayTxns,
+    todayTotal: todayTxns.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0),
+    monthSoFar: monthData,
+    prevMonth: prevData,
+    prevMonthToSameDayExpenses: Math.round(prevLivingToDay),
+    categoryPace: pace,
+    predictedMonthEnd: monthData.expenses.living !== 0
+      ? Math.round(monthData.expenses.living / currentDay * lastDay)
+      : 0,
+  };
+}

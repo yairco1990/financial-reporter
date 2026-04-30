@@ -1,0 +1,25 @@
+name: Daily Financial Report
+
+on:
+  schedule:
+    # 23:05 UTC = 01:05 Israel time. Adjust as you like.
+    - cron: '5 23 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'daily | monthly | annual | process-splits'
+        type: choice
+        options: [daily, monthly, annual, process-splits]
+        default: daily
+      arg:
+        description: 'YYYY-MM (for monthly/annual)'
+        type: string
+        default: ''
+
+jobs:
+  run:
+    uses: yairco1990/financial-reporter/.github/workflows/agent.yml@main
+    with:
+      mode: ${{ inputs.mode || 'daily' }}
+      arg: ${{ inputs.arg || '' }}
+    secrets: inherit

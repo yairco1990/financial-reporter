@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# TypeScript
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Old standalone reports
+financial-overview*.html
+daily-report-*.html
+
+# Drive sync cache (contains all user data fetched from Drive)
+.cache/
+
+# Service account key
+gcp-key.json
+*-sa.json
+
+# Legacy local data (no longer used; state lives in Drive)
+/data/
+/reports/
+/info/
