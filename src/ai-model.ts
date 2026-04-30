@@ -23,8 +23,8 @@ import {
 
 export let lastModelUsed = '';
 
-const CALL_TIMEOUT_MS = 60000;
-const MAX_ATTEMPTS = 2;
+const CALL_TIMEOUT_MS = 180000;
+const MAX_ATTEMPTS = 3;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, name: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
