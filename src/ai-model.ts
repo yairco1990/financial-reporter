@@ -66,26 +66,7 @@ export async function callModel(prompt: string): Promise<string> {
   const claudeDirectModel = ai.models?.claude || DEFAULT_CLAUDE_DIRECT_MODEL;
   const claudeVertexModel = ai.models?.claude || DEFAULT_CLAUDE_VERTEX_MODEL;
 
-  // --- Provider 1: Gemini ---
-  if (ai.geminiApiKey) {
-    try {
-      return await callWithRetry(async () => {
-        const google = createGoogleGenerativeAI({ apiKey: ai.geminiApiKey! });
-        const { text } = await generateText({
-          model: google(geminiModel),
-          prompt,
-          maxOutputTokens: 16384,
-        });
-        lastModelUsed = `Gemini ${geminiModel}`;
-        return text;
-      }, 'Gemini');
-    } catch (err: any) {
-      errors.push(`Gemini: ${err.message?.substring(0, 100)}`);
-      console.warn(`  ⚠ Gemini failed, trying next provider...`);
-    }
-  }
-
-  // --- Provider 2: OpenAI ---
+  // --- Provider 1: OpenAI ---
   if (ai.openaiApiKey) {
     try {
       return await callWithRetry(async () => {
@@ -101,6 +82,25 @@ export async function callModel(prompt: string): Promise<string> {
     } catch (err: any) {
       errors.push(`OpenAI: ${err.message?.substring(0, 100)}`);
       console.warn(`  ⚠ OpenAI failed, trying next provider...`);
+    }
+  }
+
+  // --- Provider 2: Gemini ---
+  if (ai.geminiApiKey) {
+    try {
+      return await callWithRetry(async () => {
+        const google = createGoogleGenerativeAI({ apiKey: ai.geminiApiKey! });
+        const { text } = await generateText({
+          model: google(geminiModel),
+          prompt,
+          maxOutputTokens: 16384,
+        });
+        lastModelUsed = `Gemini ${geminiModel}`;
+        return text;
+      }, 'Gemini');
+    } catch (err: any) {
+      errors.push(`Gemini: ${err.message?.substring(0, 100)}`);
+      console.warn(`  ⚠ Gemini failed, trying next provider...`);
     }
   }
 
