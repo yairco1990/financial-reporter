@@ -108,27 +108,6 @@ async function main() {
       await processSplits();
       const portfolio = await fetchPortfolio();
       await generateDailyReport(transactions, portfolio);
-
-      // On the 1st of the month: also generate monthly report for previous month
-      const today = new Date();
-      if (today.getDate() === 1) {
-        const prev = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        const prevMonth = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
-        console.log(`First of month — also running monthly report for ${prevMonth}...`);
-        await generateMonthlyReport(transactions, prevMonth);
-      }
-
-      // On Jan 1: also generate annual report for previous year
-      if (today.getDate() === 1 && today.getMonth() === 0) {
-        const prevYear = today.getFullYear() - 1;
-        const monthList: string[] = [];
-        for (let m = 1; m <= 12; m++) {
-          monthList.push(`${prevYear}-${String(m).padStart(2, '0')}`);
-        }
-        console.log(`First of January — also running annual report for ${prevYear}...`);
-        await generateAnnualReport(transactions, monthList);
-      }
-
       break;
     }
 
