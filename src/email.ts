@@ -18,12 +18,15 @@ export async function sendEmail(subject: string, htmlBody: string): Promise<void
     auth: { user: cfg.from, pass: cfg.gmailAppPassword },
   });
 
-  await transporter.sendMail({
-    from: `"Financial Agent" <${cfg.from}>`,
-    to: cfg.to,
-    subject,
-    html: `<div dir="rtl" style="font-family:Arial,Helvetica,sans-serif;direction:rtl;text-align:right">${htmlBody}</div>`,
-  });
-
-  console.log('  Email sent');
+  try {
+    await transporter.sendMail({
+      from: `"Financial Agent" <${cfg.from}>`,
+      to: cfg.to,
+      subject,
+      html: `<div dir="rtl" style="font-family:Arial,Helvetica,sans-serif;direction:rtl;text-align:right">${htmlBody}</div>`,
+    });
+    console.log('  Email sent');
+  } finally {
+    transporter.close();
+  }
 }
