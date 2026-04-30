@@ -50,7 +50,8 @@ export async function fetchFromBanks(startDate: Date): Promise<Transaction[]> {
           const result = await scraper.scrape(config.credentials as ScraperCredentials);
 
           if (!result.success) {
-            console.warn(`  ⚠ ${config.name} attempt ${attempt + 1}/3 failed: ${result.errorType}`);
+            const errMsg = (result as any).errorMessage || '';
+            console.warn(`  ⚠ ${config.name} attempt ${attempt + 1}/3 failed: ${result.errorType}${errMsg ? ` — ${errMsg.substring(0, 200)}` : ''}`);
             if (attempt < 2) {
               await new Promise(r => setTimeout(r, 5000 * (attempt + 1)));
               continue;
