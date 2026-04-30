@@ -74,7 +74,7 @@ export async function callModel(prompt: string): Promise<string> {
         const { text } = await generateText({
           model: openai(openaiModel),
           prompt,
-          maxOutputTokens: 16384,
+          maxOutputTokens: 32768,
         });
         lastModelUsed = `OpenAI ${openaiModel}`;
         return text;
@@ -93,7 +93,7 @@ export async function callModel(prompt: string): Promise<string> {
         const { text } = await generateText({
           model: google(geminiModel),
           prompt,
-          maxOutputTokens: 16384,
+          maxOutputTokens: 32768,
         });
         lastModelUsed = `Gemini ${geminiModel}`;
         return text;
@@ -135,7 +135,7 @@ export async function callModel(prompt: string): Promise<string> {
         const { text } = await generateText({
           model: anthropic(claudeDirectModel),
           prompt,
-          maxOutputTokens: 16384,
+          maxOutputTokens: 32768,
         });
         lastModelUsed = `Claude ${claudeDirectModel}`;
         return text;
