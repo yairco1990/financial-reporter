@@ -87,7 +87,14 @@ jobs:
           git add -A
           if git diff --cached --quiet; then
             echo "No state changes to commit"
-          else
-            git commit -m "agent: ${{ inputs.mode }} run $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            git push
+            exit 0
           fi
+          git commit -m "agent: ${{ inputs.mode }} run $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # Pull any remote changes (e.g. user edited config.json) and rebase our commit on top
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push && exit 0
+            echo "Push attempt $i failed, retrying..."
+            sleep 2
+          done
+          echo "Push failed after 3 attempts"
+          exit 1
