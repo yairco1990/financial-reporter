@@ -100,7 +100,7 @@ async function main() {
         d.setMonth(d.getMonth() - 1);
         return d.toISOString().substring(0, 7);
       })();
-      await generateMonthlyReport(transactions, month);
+      await generateMonthlyReport(transactions, month, true);
       break;
     }
 

@@ -77,6 +77,15 @@ jobs:
         env:
           STATE_REPO_PATH: ${{ github.workspace }}/state
           SPLITS_INBOX_FOLDER_ID: ${{ secrets.SPLITS_INBOX_FOLDER_ID }}
+          # Secrets — injected from the calling state repo (secrets: inherit).
+          # These override the corresponding fields in config.json (see state.ts).
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MERCANTILE_PASSWORD: ${{ secrets.MERCANTILE_PASSWORD }}
+          MAX_PASSWORD: ${{ secrets.MAX_PASSWORD }}
+          VISACAL_PASSWORD: ${{ secrets.VISACAL_PASSWORD }}
         run: node build/financial-agent.js ${{ inputs.mode }} ${{ inputs.arg }}
 
       - name: Commit and push state changes
