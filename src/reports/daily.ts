@@ -70,6 +70,10 @@ FIVE sections with clear headers:
 
 Format as HTML with inline CSS (email-safe). RTL direction. Modern clean design.
 Section headers with colored backgrounds. Tables with alternating rows.
+MOBILE-FIRST: this is read mostly on a phone. Do NOT use fixed pixel widths or min-widths.
+Make every table width:100% (no horizontal scrolling); keep tables to 3-4 columns max so they
+fit a narrow screen — if a table would be wider, drop low-value columns or stack the data.
+Use font-size 13px+ and generous tap targets. The whole report must fit a ~360px-wide viewport.
 Use <details><summary> for category breakdowns — collapsed by default, expandable on click.
 IMPORTANT: Include ALL transactions in each category — never truncate, summarize, or use "..." or "show more". List every single transaction.
 Keep it SHORT and actionable — this is a daily email, not a full report.`;
