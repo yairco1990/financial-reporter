@@ -47,7 +47,7 @@ export async function generateMonthlyReport(transactions: Transaction[], month: 
 ### Category Breakdown (with transaction details)
 ${data.categories.map(c => {
     const txns = data.categoryBreakdown[c.category] || [];
-    const txnList = txns.map(t => `    - ${t.date} | ${t.description} | ₪${t.amount.toLocaleString()} [${t.source}]`).join('\n');
+    const txnList = txns.map(t => `    - ${t.date} | ${t.description} | ₪${t.amount.toLocaleString()}${t.originalCurrency ? ` (${Math.abs(t.originalAmount!).toLocaleString()} ${t.originalCurrency})` : ''} [${t.source}]`).join('\n');
     return `- ${c.category}: ₪${Math.abs(c.total).toLocaleString()} (${c.count} transactions)\n  Transactions:\n${txnList}`;
   }).join('\n')}
 

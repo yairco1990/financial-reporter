@@ -13,11 +13,53 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Transaction } from '../types';
 import { getBankConfigs, BankConfig, DATA_DIR } from '../config';
+import { isIls, convertToIls } from '../currency';
 
 const CACHE_FILE = path.join(DATA_DIR, 'all_transactions.json');
 
 function hasCredentials(config: BankConfig): boolean {
   return Object.values(config.credentials).every(v => v !== '');
+}
+
+/**
+ * Normalize a raw scraper transaction into our Transaction, resolving the ILS
+ * amount currency-aware:
+ *   - chargedAmount is the amount the card actually billed in ILS — use it
+ *     whenever the bank has provided it (finite & non-zero).
+ *   - domestic (ILS) transaction without a charged amount → use originalAmount.
+ *   - foreign transaction whose ILS charge hasn't settled yet → convert the
+ *     original foreign amount to ILS (so 10,199 HUF isn't recorded as ₪10,199).
+ * The original foreign amount/currency are kept for transparency in reports.
+ */
+async function normalizeTxn(source: string, txn: any): Promise<Transaction> {
+  const origCurrency: string | undefined = txn.originalCurrency;
+  const foreign = !isIls(origCurrency);
+  const charged = txn.chargedAmount;
+
+  let amount: number;
+  if (typeof charged === 'number' && Number.isFinite(charged) && charged !== 0) {
+    amount = charged; // bank's real ILS charge (always ILS for these cards)
+  } else if (!foreign) {
+    amount = txn.originalAmount || 0; // domestic ILS, charge not separately given
+  } else {
+    const converted = await convertToIls(txn.originalAmount || 0, origCurrency!);
+    amount = converted ?? 0; // unsettled foreign charge → FX estimate
+  }
+
+  const base: Transaction = {
+    source,
+    date: txn.date || '',
+    description: txn.description || '',
+    amount,
+    category: txn.category || '',
+    memo: txn.memo || '',
+    status: txn.status || '',
+  };
+  if (foreign) {
+    base.originalAmount = txn.originalAmount;
+    base.originalCurrency = origCurrency;
+  }
+  return base;
 }
 
 export async function fetchFromBanks(startDate: Date): Promise<Transaction[]> {
@@ -82,15 +124,7 @@ export async function fetchFromBanks(startDate: Date): Promise<Transaction[]> {
   for (const { name, data } of successful) {
     for (const account of data.accounts || []) {
       for (const txn of account.txns || []) {
-        transactions.push({
-          source: name,
-          date: txn.date || '',
-          description: txn.description || '',
-          amount: txn.chargedAmount || txn.originalAmount || 0,
-          category: txn.category || '',
-          memo: txn.memo || '',
-          status: txn.status || '',
-        });
+        transactions.push(await normalizeTxn(name, txn));
       }
     }
   }

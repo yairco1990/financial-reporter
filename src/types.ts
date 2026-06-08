@@ -21,6 +21,10 @@ export interface Transaction {
   memo: string;
   /** Transaction status (e.g. "completed", "pending") */
   status: string;
+  /** Original amount in the transaction's own currency (set only for foreign-currency charges) */
+  originalAmount?: number;
+  /** ISO currency code of originalAmount, e.g. "HUF", "USD" (set only for foreign-currency charges) */
+  originalCurrency?: string;
 }
 
 /** Aggregated spending per category */

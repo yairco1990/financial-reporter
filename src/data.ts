@@ -124,7 +124,7 @@ export async function buildMonthData(transactions: Transaction[], month: string)
   const merchantTotals = getMerchantTotals(livingExpenses);
 
   // --- Per-category transaction breakdown ---
-  const categoryBreakdown: Record<string, { date: string; description: string; amount: number; source: string }[]> = {};
+  const categoryBreakdown: Record<string, { date: string; description: string; amount: number; source: string; originalAmount?: number; originalCurrency?: string }[]> = {};
   for (const t of livingExpenses) {
     const cat = t.category || 'ללא קטגוריה';
     if (!categoryBreakdown[cat]) categoryBreakdown[cat] = [];
@@ -133,6 +133,7 @@ export async function buildMonthData(transactions: Transaction[], month: string)
       description: t.description,
       amount: Math.round(t.amount),
       source: t.source,
+      ...(t.originalCurrency ? { originalAmount: t.originalAmount, originalCurrency: t.originalCurrency } : {}),
     });
   }
 
@@ -239,6 +240,7 @@ export async function buildDailyData(transactions: Transaction[], today: string)
     .map(t => ({
       description: t.description, amount: Math.round(t.amount),
       category: t.category, source: t.source,
+      ...(t.originalCurrency ? { originalAmount: t.originalAmount, originalCurrency: t.originalCurrency } : {}),
     }));
 
   // Full month summaries

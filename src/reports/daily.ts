@@ -32,7 +32,7 @@ export async function generateDailyReport(transactions: Transaction[], portfolio
 ## Daily Data for ${yesterday} (Day ${data.currentDay}/${data.daysInMonth}, ${data.daysLeft} days left)
 
 ### Yesterday's Transactions (${yesterday})
-${data.todayTransactions.length ? data.todayTransactions.map(t => `- ${t.description}: ₪${t.amount.toLocaleString()} [${t.source}] ${t.category}`).join('\n') : 'No transactions yesterday'}
+${data.todayTransactions.length ? data.todayTransactions.map(t => `- ${t.description}: ₪${t.amount.toLocaleString()}${t.originalCurrency ? ` (${Math.abs(t.originalAmount!).toLocaleString()} ${t.originalCurrency})` : ''} [${t.source}] ${t.category}`).join('\n') : 'No transactions yesterday'}
 Total yesterday: ₪${data.todayTotal.toLocaleString()}
 
 ### Month So Far (${data.currentMonth})
@@ -44,7 +44,7 @@ Total yesterday: ₪${data.todayTotal.toLocaleString()}
 ### Category Pace (current month vs previous month)
 ${data.categoryPace.filter(c => Math.abs(c.total) > 100).map(c => {
     const breakdown = data.monthSoFar.categoryBreakdown[c.category] || [];
-    const txnList = breakdown.map(t => `    - ${t.date} | ${t.description} | ₪${t.amount.toLocaleString()} [${t.source}]`).join('\n');
+    const txnList = breakdown.map(t => `    - ${t.date} | ${t.description} | ₪${t.amount.toLocaleString()}${t.originalCurrency ? ` (${Math.abs(t.originalAmount!).toLocaleString()} ${t.originalCurrency})` : ''} [${t.source}]`).join('\n');
     return `- ${c.category}: ₪${Math.abs(c.total).toLocaleString()} spent | prev month total: ₪${Math.abs(c.prevMonthTotal).toLocaleString()} | pace: ${c.pace.toUpperCase()} | daily budget left: ₪${c.dailyBudgetRemaining}\n  Transactions:\n${txnList}`;
   }).join('\n')}
 
@@ -76,6 +76,7 @@ fit a narrow screen — if a table would be wider, drop low-value columns or sta
 Use font-size 13px+ and generous tap targets. The whole report must fit a ~360px-wide viewport.
 Use <details><summary> for category breakdowns — collapsed by default, expandable on click.
 IMPORTANT: Include ALL transactions in each category — never truncate, summarize, or use "..." or "show more". List every single transaction.
+Note: amounts shown as ₪ are already in shekels (foreign charges are pre-converted). When a transaction lists an original currency in parentheses (e.g. "10,199 HUF"), keep that note next to the shekel amount so foreign purchases are clear.
 Keep it SHORT and actionable — this is a daily email, not a full report.`;
 
   const report = await callModel(prompt);
