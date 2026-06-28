@@ -20,6 +20,25 @@ import { buildDailyData } from '../data';
 import { callModel, lastModelUsed } from '../ai-model';
 import { sendEmail } from '../email';
 import { formatPortfolioSection } from '../scrapers/portfolio';
+import { getConnectorStatuses } from '../connector-status';
+
+/** Build a ✅/❌ data-source summary shown at the very top of the report. */
+function renderConnectorStatus(): string {
+  const statuses = getConnectorStatuses();
+  if (!statuses.length) return '';
+  const icon = (s: string) => (s === 'ok' ? '✅' : s === 'failed' ? '❌' : '⚪');
+  const anyFailed = statuses.some(s => s.state === 'failed');
+  const items = statuses
+    .map(s => `<span style="display:inline-block;white-space:nowrap;margin:2px 12px 2px 0;">${icon(s.state)} ${s.name}${s.detail ? ` <span style="color:#888;font-size:12px;">(${s.detail})</span>` : ''}</span>`)
+    .join(' ');
+  const warn = anyFailed
+    ? `<div style="color:#b91c1c;font-weight:700;margin-bottom:6px;">⚠️ חלק ממקורות הנתונים לא נטענו — ייתכן שחסרים נתונים בדוח</div>`
+    : '';
+  return `<div style="border:1px solid #e5e7eb;background:#f9fafb;border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:14px;direction:rtl;text-align:right;">
+  <div style="font-weight:700;margin-bottom:4px;">מקורות נתונים</div>
+  ${warn}${items}
+</div>`;
+}
 
 export async function generateDailyReport(transactions: Transaction[], portfolio: PortfolioData | null): Promise<void> {
   // The job runs at 1 AM Jerusalem time, so we report on yesterday
@@ -86,6 +105,8 @@ Keep it SHORT and actionable — this is a daily email, not a full report.`;
   let html = report;
   const match = report.match(/```html\n?([\s\S]*?)```/);
   if (match) html = match[1];
+  // Prepend the data-source (connector) summary so failures are visible up top.
+  html = renderConnectorStatus() + html;
   html += modelFooter;
 
   const dailyDir = path.join(REPORTS_DIR, 'daily');

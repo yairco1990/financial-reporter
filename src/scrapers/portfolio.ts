@@ -16,14 +16,19 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PortfolioData, PortfolioHolding } from '../types';
 import { getBankConfigs, getPortfolioBank, DATA_DIR } from '../config';
+import { setConnectorStatus } from '../connector-status';
 
 const PORTFOLIO_CACHE = path.join(DATA_DIR, 'portfolio.json');
+const PORTFOLIO_CONNECTOR = 'Portfolio (Telebank)';
 
 /**
  * Fetch portfolio data from Telebank's securities API.
  * Currently only supports Mercantile (Telebank). Falls back to cached data if login or API calls fail.
  */
 export async function fetchPortfolio(): Promise<PortfolioData | null> {
+  // Default to "skipped"; an early return (no bank/no password) leaves it so.
+  // Once we actually attempt a live fetch it becomes "failed" until success.
+  setConnectorStatus(PORTFOLIO_CONNECTOR, 'skipped', 'not fetched');
   const portfolioBank = getPortfolioBank();
   if (!portfolioBank) {
     console.log('  No portfolio.bank configured, skipping portfolio fetch');
@@ -48,6 +53,7 @@ export async function fetchPortfolio(): Promise<PortfolioData | null> {
   }
 
   console.log('Fetching portfolio from Telebank...');
+  setConnectorStatus(PORTFOLIO_CONNECTOR, 'failed', 'fetch failed');
   let browser;
   try {
     browser = await puppeteer.launch({
@@ -86,6 +92,7 @@ export async function fetchPortfolio(): Promise<PortfolioData | null> {
     const loggedIn = /\/apollo\/retail\d*\//.test(currentUrl);
     if (!loggedIn) {
       console.warn(`  ⚠ Portfolio login failed, URL: ${currentUrl}`);
+      setConnectorStatus(PORTFOLIO_CONNECTOR, 'failed', 'login failed');
       return loadPortfolioFromCache();
     }
     console.log('  ✓ Telebank login successful');
@@ -204,6 +211,7 @@ export async function fetchPortfolio(): Promise<PortfolioData | null> {
     fs.writeFileSync(snapshotPath, JSON.stringify(portfolio, null, 2));
 
     console.log(`  ✓ Portfolio fetched: ₪${portfolio.totalValue.toLocaleString()} (${holdings.length} holdings)`);
+    setConnectorStatus(PORTFOLIO_CONNECTOR, 'ok', `${holdings.length} holdings`);
     return portfolio;
   } catch (err: any) {
     console.warn(`  ⚠ Portfolio fetch failed: ${err.message}`);

@@ -14,11 +14,28 @@ import * as path from 'path';
 import { Transaction } from '../types';
 import { getBankConfigs, BankConfig, DATA_DIR } from '../config';
 import { isIls, convertToIls } from '../currency';
+import { setConnectorStatus } from '../connector-status';
 
 const CACHE_FILE = path.join(DATA_DIR, 'all_transactions.json');
 
 function hasCredentials(config: BankConfig): boolean {
   return Object.values(config.credentials).every(v => v !== '');
+}
+
+// Bank value-dates arrive as UTC timestamps anchored to local midnight in
+// Israel (e.g. midnight June 1 IL = "2026-05-31T21:00:00Z"). Comparing the
+// raw ISO prefix would bucket such a transaction into the wrong day/month, so
+// we re-derive the calendar date in Asia/Jerusalem. DST is handled by Intl.
+const ISRAEL_DATE_FMT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Jerusalem',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+}); // en-CA → "YYYY-MM-DD"
+
+function toIsraelDate(iso: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso.substring(0, 10);
+  return ISRAEL_DATE_FMT.format(d);
 }
 
 /**
@@ -48,7 +65,7 @@ async function normalizeTxn(source: string, txn: any): Promise<Transaction> {
 
   const base: Transaction = {
     source,
-    date: txn.date || '',
+    date: toIsraelDate(txn.date || ''),
     description: txn.description || '',
     amount,
     category: txn.category || '',
@@ -63,7 +80,12 @@ async function normalizeTxn(source: string, txn: any): Promise<Transaction> {
 }
 
 export async function fetchFromBanks(startDate: Date): Promise<Transaction[]> {
-  const activeBanks = getBankConfigs().filter(hasCredentials);
+  const allBanks = getBankConfigs();
+  const activeBanks = allBanks.filter(hasCredentials);
+  // Banks without credentials are reported as skipped in the connector summary.
+  for (const b of allBanks) {
+    if (!hasCredentials(b)) setConnectorStatus(b.name, 'skipped', 'no credentials');
+  }
   if (activeBanks.length === 0) {
     console.warn('No banks configured with credentials in config.json');
     const cached = loadFromCache();
@@ -78,6 +100,7 @@ export async function fetchFromBanks(startDate: Date): Promise<Transaction[]> {
     activeBanks.map(async (config) => {
       console.log(`  Fetching ${config.name}...`);
 
+      let lastErr = '';
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           const scraper = createScraper({
@@ -93,23 +116,29 @@ export async function fetchFromBanks(startDate: Date): Promise<Transaction[]> {
 
           if (!result.success) {
             const errMsg = (result as any).errorMessage || '';
-            console.warn(`  ⚠ ${config.name} attempt ${attempt + 1}/3 failed: ${result.errorType}${errMsg ? ` — ${errMsg.substring(0, 200)}` : ''}`);
+            lastErr = `${result.errorType}${errMsg ? ` — ${errMsg.substring(0, 200)}` : ''}`;
+            console.warn(`  ⚠ ${config.name} attempt ${attempt + 1}/3 failed: ${lastErr}`);
             if (attempt < 2) {
               await new Promise(r => setTimeout(r, 5000 * (attempt + 1)));
               continue;
             }
             console.warn(`  ⚠ ${config.name} failed after 3 attempts — skipping`);
+            setConnectorStatus(config.name, 'failed', String(result.errorType || 'failed'));
             return null;
           }
 
+          const count = (result.accounts || []).reduce((s: number, a: any) => s + (a.txns?.length || 0), 0);
+          setConnectorStatus(config.name, 'ok', `${count} txns`);
           return { name: config.name, data: result };
         } catch (err: any) {
-          console.warn(`  ⚠ ${config.name} attempt ${attempt + 1}/3 error: ${err.message}`);
+          lastErr = err.message || 'error';
+          console.warn(`  ⚠ ${config.name} attempt ${attempt + 1}/3 error: ${lastErr}`);
           if (attempt < 2) {
             await new Promise(r => setTimeout(r, 5000 * (attempt + 1)));
             continue;
           }
           console.warn(`  ⚠ ${config.name} failed after 3 attempts — skipping`);
+          setConnectorStatus(config.name, 'failed', lastErr.substring(0, 60));
           return null;
         }
       }
