@@ -36,12 +36,18 @@ async function main() {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - 3); // small range — we only need a successful login
 
+  // This repo skips downloading Chromium (.npmrc), so use a real browser binary:
+  // PUPPETEER_EXECUTABLE_PATH if set, else system Chrome on macOS.
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+    || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : undefined);
+
   const scraper = createScraper({
     companyId: 'hapoalim' as any,
     startDate,
     combineInstallments: false,
     showBrowser: process.env.SHOW_BROWSER === '1',
     timeout: 180000,
+    executablePath,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
   } as any);
 
