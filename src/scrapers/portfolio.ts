@@ -79,10 +79,12 @@ export async function fetchPortfolio(): Promise<PortfolioData | null> {
       try { await page.waitForSelector('#general-error', { timeout: 100 }); } catch {}
     }
 
-    // Verify login succeeded
+    // Verify login succeeded. Telebank lands on /apollo/retail<N>/ after login
+    // and periodically bumps the version (retail → retail2 → retail3 → ...), so
+    // match the family rather than an exact list to avoid breaking on each bump.
     const currentUrl = page.url();
-    const successUrls = ['/apollo/retail/#/MY_ACCOUNT_HOMEPAGE', '/apollo/retail2/#/MY_ACCOUNT_HOMEPAGE', '/apollo/retail2/'];
-    if (!successUrls.some(s => currentUrl.includes(s))) {
+    const loggedIn = /\/apollo\/retail\d*\//.test(currentUrl);
+    if (!loggedIn) {
       console.warn(`  ⚠ Portfolio login failed, URL: ${currentUrl}`);
       return loadPortfolioFromCache();
     }
