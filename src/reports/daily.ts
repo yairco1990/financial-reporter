@@ -21,6 +21,7 @@ import { callModel, lastModelUsed } from '../ai-model';
 import { sendEmail } from '../email';
 import { formatPortfolioSection } from '../scrapers/portfolio';
 import { getConnectorStatuses } from '../connector-status';
+import { renderExpenseHistory } from './expense-history';
 
 /** Build a ✅/❌ data-source summary shown at the very top of the report. */
 function renderConnectorStatus(): string {
@@ -80,9 +81,10 @@ ${formatPortfolioSection(portfolio)}
 ## Task
 Generate a concise daily email report in Hebrew.
 
-FIVE sections with clear headers:
+Produce these sections with clear headers:
 1. עסקאות אתמול (${yesterday}) — list yesterday's transactions, flag unusual ones
-2. מצב החודש (יום ${data.currentDay}/${data.daysInMonth}) — expenses vs budget pace per category, use traffic lights (🔴 above pace, 🟡 on track, 🟢 below pace). For EACH category, include a collapsible breakdown using <details><summary>...</summary>...</details> HTML tags (collapsed by default). The summary shows category name, total, and pace. Inside, list ALL transactions — every single one, no truncation, no "show more", no "...". Show date, description, amount, source for each.
+2. Immediately after section 1, output EXACTLY this placeholder on its own line: <!--EXPENSE_HISTORY-->
+   Do NOT generate any monthly expense breakdown, category tables, budget-pace/traffic-light tables, or per-transaction lists for the month — that entire section is rendered automatically and injected at the placeholder. (The month data above is provided only so your insights in the last section are accurate.)
 3. תשלומים משותפים — if there are split payments this month, show them and the net savings
 4. תיק השקעות — portfolio summary: total value, daily P&L, month-to-date performance (if available), YTD return, per-holding table with name/symbol/value/allocation/gain-from-buy/daily-change. Highlight best and worst performers. Show trend direction (improving/declining this month). ${portfolio?.upcomingPayments?.length ? 'Include upcoming dividends.' : ''}
 5. תובנות והמלצות — comparison to previous month, 3 tips for rest of month
@@ -92,9 +94,7 @@ Section headers with colored backgrounds. Tables with alternating rows.
 MOBILE-FIRST: this is read mostly on a phone. Do NOT use fixed pixel widths or min-widths.
 Make every table width:100% (no horizontal scrolling); keep tables to 3-4 columns max so they
 fit a narrow screen — if a table would be wider, drop low-value columns or stack the data.
-Use font-size 13px+ and generous tap targets. The whole report must fit a ~360px-wide viewport.
-Use <details><summary> for category breakdowns — collapsed by default, expandable on click.
-IMPORTANT: Include ALL transactions in each category — never truncate, summarize, or use "..." or "show more". List every single transaction.
+Use font-size 13px+ and generous tap targets. Use the full available width — do not constrain content to a narrow column.
 Note: amounts shown as ₪ are already in shekels (foreign charges are pre-converted). When a transaction lists an original currency in parentheses (e.g. "10,199 HUF"), keep that note next to the shekel amount so foreign purchases are clear.
 Keep it SHORT and actionable — this is a daily email, not a full report.`;
 
@@ -105,6 +105,16 @@ Keep it SHORT and actionable — this is a daily email, not a full report.`;
   let html = report;
   const match = report.match(/```html\n?([\s\S]*?)```/);
   if (match) html = match[1];
+
+  // Inject the deterministic month expense-history UI at the model's placeholder
+  // (falls back to placing it up top if the model omitted the placeholder).
+  const expenseHistory = renderExpenseHistory(data);
+  if (html.includes('<!--EXPENSE_HISTORY-->')) {
+    html = html.replace('<!--EXPENSE_HISTORY-->', expenseHistory);
+  } else {
+    html = expenseHistory + html;
+  }
+
   // Prepend the data-source (connector) summary so failures are visible up top.
   html = renderConnectorStatus() + html;
   html += modelFooter;

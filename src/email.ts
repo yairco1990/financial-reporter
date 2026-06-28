@@ -48,7 +48,7 @@ function wrapResponsive(htmlBody: string): string {
 <meta name="color-scheme" content="light only">
 <style>
   body { margin:0 !important; padding:0 !important; background:#f4f4f7; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
-  .fr-container { max-width:600px; margin:0 auto; padding:16px; box-sizing:border-box;
+  .fr-container { width:100%; max-width:100%; margin:0 auto; padding:16px; box-sizing:border-box;
     font-family:Arial,Helvetica,sans-serif; direction:rtl; text-align:right;
     color:#1a1a1a; font-size:15px; line-height:1.6; }
   .fr-container img { max-width:100% !important; height:auto !important; }
