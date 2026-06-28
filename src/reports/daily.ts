@@ -41,6 +41,20 @@ function renderConnectorStatus(): string {
 </div>`;
 }
 
+/** Reduce a (possibly full) HTML document to just its body-content fragment. */
+function stripDocumentScaffold(s: string): string {
+  let out = s;
+  const body = out.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (body) out = body[1];
+  return out
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<\/?html[^>]*>/gi, '')
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<\/?body[^>]*>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '') // drop model <style> blocks; we use inline styles + our own
+    .trim();
+}
+
 export async function generateDailyReport(transactions: Transaction[], portfolio: PortfolioData | null): Promise<void> {
   // The job runs at 1 AM Jerusalem time, so we report on yesterday
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
@@ -89,12 +103,14 @@ Produce these sections with clear headers:
 4. תיק השקעות — portfolio summary: total value, daily P&L, month-to-date performance (if available), YTD return, per-holding table with name/symbol/value/allocation/gain-from-buy/daily-change. Highlight best and worst performers. Show trend direction (improving/declining this month). ${portfolio?.upcomingPayments?.length ? 'Include upcoming dividends.' : ''}
 5. תובנות והמלצות — comparison to previous month, 3 tips for rest of month
 
-Format as HTML with inline CSS (email-safe). RTL direction. Modern clean design.
-Section headers with colored backgrounds. Tables with alternating rows.
-MOBILE-FIRST: this is read mostly on a phone. Do NOT use fixed pixel widths or min-widths.
-Make every table width:100% (no horizontal scrolling); keep tables to 3-4 columns max so they
-fit a narrow screen — if a table would be wider, drop low-value columns or stack the data.
-Use font-size 13px+ and generous tap targets. Use the full available width — do not constrain content to a narrow column.
+Output ONLY an HTML fragment using INLINE styles (style="..."). Do NOT output a full document:
+no <!DOCTYPE>, no <html>, <head>, <body>, or <style> tags, and no wrapping container with a
+max-width or side margins — the email already provides the full-width responsive container.
+RTL direction. Modern clean design. Section headers with colored backgrounds. Tables with alternating rows.
+MOBILE-FIRST: this is read mostly on a phone. Do NOT use fixed pixel widths, min-widths, or any max-width.
+Make every element and table width:100% so it spans the full screen (no horizontal scrolling); keep tables
+to 3-4 columns max — if a table would be wider, drop low-value columns or stack the data.
+Use font-size 13px+ and generous tap targets.
 Note: amounts shown as ₪ are already in shekels (foreign charges are pre-converted). When a transaction lists an original currency in parentheses (e.g. "10,199 HUF"), keep that note next to the shekel amount so foreign purchases are clear.
 Keep it SHORT and actionable — this is a daily email, not a full report.`;
 
@@ -105,6 +121,10 @@ Keep it SHORT and actionable — this is a daily email, not a full report.`;
   let html = report;
   const match = report.match(/```html\n?([\s\S]*?)```/);
   if (match) html = match[1];
+  // The model sometimes returns a FULL HTML document (<!DOCTYPE>/<html>/<head>/<style>/<body>).
+  // Reduce it to just the body fragment so its own <head>/<style>/body width rules don't
+  // fight our responsive full-width wrapper. Keep only the inner body content.
+  html = stripDocumentScaffold(html);
 
   // Inject the deterministic month expense-history UI at the model's placeholder
   // (falls back to placing it up top if the model omitted the placeholder).
