@@ -103,14 +103,27 @@ export async function fetchFromBanks(startDate: Date): Promise<Transaction[]> {
       let lastErr = '';
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const scraper = createScraper({
+          const scraperOptions: any = {
             companyId: config.bankId,
             startDate,
             combineInstallments: false,
             showBrowser: false,
             timeout: 120000,
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
-          });
+          };
+          // Hapoalim challenges unrecognized devices with SMS OTP, which we can't
+          // answer in unattended CI. Inject pre-captured device-trust data (cookies
+          // + localStorage) so the bank recognizes the device and skips 2FA.
+          // Bootstrap it once locally (see scripts/bootstrap-hapoalim-device-trust.ts).
+          if (config.bankId === ('hapoalim' as any) && process.env.HAPOALIM_DEVICE_TRUST) {
+            try {
+              scraperOptions.deviceTrustData = JSON.parse(process.env.HAPOALIM_DEVICE_TRUST);
+              console.log('  ↳ Hapoalim: injected saved device-trust data');
+            } catch {
+              console.warn('  ⚠ HAPOALIM_DEVICE_TRUST is set but is not valid JSON — ignoring');
+            }
+          }
+          const scraper = createScraper(scraperOptions);
 
           const result = await scraper.scrape(config.credentials as ScraperCredentials);
 
@@ -124,6 +137,9 @@ export async function fetchFromBanks(startDate: Date): Promise<Transaction[]> {
             }
             console.warn(`  ⚠ ${config.name} failed after 3 attempts — skipping`);
             setConnectorStatus(config.name, 'failed', String(result.errorType || 'failed'));
+            if (config.bankId === ('hapoalim' as any)) {
+              console.warn('  ↳ Hapoalim device trust missing/expired — re-run scripts/bootstrap-hapoalim-device-trust.ts and update the HAPOALIM_DEVICE_TRUST secret');
+            }
             return null;
           }
 

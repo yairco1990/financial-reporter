@@ -23,7 +23,7 @@
     "ai": "^6.0.141",
     "dotenv": "^17.4.2",
     "googleapis": "^171.4.0",
-    "israeli-bank-scrapers": "^6.7.8",
+    "israeli-bank-scrapers": "github:yairco1990/israeli-bank-scrapers#97150a5c003d0e39531184b24ebc66733b6eea4d",
     "nodemailer": "^8.0.4",
     "ts-node": "^10.0.0",
     "typescript": "^5.0.0",
