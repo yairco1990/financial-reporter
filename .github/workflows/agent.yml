@@ -86,6 +86,7 @@ jobs:
           MERCANTILE_PASSWORD: ${{ secrets.MERCANTILE_PASSWORD }}
           MAX_PASSWORD: ${{ secrets.MAX_PASSWORD }}
           VISACAL_PASSWORD: ${{ secrets.VISACAL_PASSWORD }}
+          HAPOALIM_DEVICE_TRUST: ${{ secrets.HAPOALIM_DEVICE_TRUST }}
         run: node build/financial-agent.js ${{ inputs.mode }} ${{ inputs.arg }}
 
       - name: Commit and push state changes
