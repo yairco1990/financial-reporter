@@ -43,3 +43,5 @@ gcp-key.json
 /data/
 /reports/
 /info/
+# local MCP config (machine-specific)
+.mcp.json
