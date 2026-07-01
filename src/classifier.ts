@@ -48,6 +48,13 @@ const REIMBURSEMENT_PATTERN = /מפייבוקס|PAYBOX.*זיכוי|BIT.*זיכו
 /** Internal transfers between own accounts */
 const TRANSFER_PATTERN = /העברה לחשבון|העברה מחשבון|העברה בין חשבונות/;
 
+/**
+ * Outgoing Bit / PayBox payments (money you spent via the app, charged to a
+ * card). These are real expenses — NOT internal transfers or reimbursements.
+ * (Incoming reimbursements say "זיכוי" and are caught by REIMBURSEMENT_PATTERN.)
+ */
+const APP_PAYMENT_SPEND = /העברה ב\s*BIT|העברה ב\s*PAYBOX|העברה בביט|העברה בפייבוקס|תשלום ב\s*BIT|תשלום בביט/i;
+
 // --- User-specific patterns (edit these for your situation) ---
 
 /** Monthly salary deposit — add your employer name as it appears in transactions */
@@ -92,6 +99,7 @@ export function classifyTransaction(t: Transaction): string {
   if (SALARY_PATTERN.test(desc)) return 'salary';
   if (SAVINGS_PATTERN.test(desc)) return 'savings';
   if (REIMBURSEMENT_PATTERN.test(desc)) return 'reimbursement';
+  if (APP_PAYMENT_SPEND.test(desc)) return 'living'; // outgoing Bit/PayBox = spending
   if (ATM_PATTERN.test(desc)) return 'atm';
   if (LOAN_PATTERN?.test(desc)) return 'loan';
   if (NOT_PERSONAL?.test(desc)) return 'not_personal';
@@ -121,7 +129,8 @@ export async function classifyWithLLM(
   const prompt = `Classify Israeli bank transaction descriptions into one of these categories:
 living | salary | savings | donation | freelance_income | freelance_expense | investment | investment_fee | loan | reimbursement | transfer | credit_card_aggregate | atm | not_personal
 
-Default to "living" for personal expenses (food, shopping, restaurants, transport, health, entertainment, bills, subscriptions).
+Default to "living" for personal expenses (food, shopping, restaurants, transport, health, entertainment, bills, subscriptions, insurance, taxes).
+IMPORTANT: "transfer" means ONLY a transfer between the user's OWN accounts (e.g. moving money to their own savings/brokerage). A payment or money transfer to ANOTHER PERSON (a personal name), rent to a landlord, or a Bit/PayBox payment is real spending — classify those as "living", NOT "transfer". Use "reimbursement" only for money the user RECEIVES back (credits, "זיכוי").
 
 Output ONLY a JSON object mapping the line number to the category. Example: {"1":"living","2":"salary"}.
 

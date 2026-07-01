@@ -23,13 +23,14 @@ export async function generateMonthlyReport(transactions: Transaction[], month: 
   console.log(`Generating monthly report: ${month}...`);
   const data = await buildMonthData(transactions, month);
 
-  // Load previous month's report for comparison (if it exists)
+  // Previous month: compute figures from CURRENT data (not the saved report,
+  // which may have been generated with older/buggy classification or dates).
   const [year, mon] = month.split('-').map(Number);
   const prevMonth = mon === 1
     ? `${year - 1}-12`
     : `${year}-${String(mon - 1).padStart(2, '0')}`;
-  const prevReportPath = path.join(REPORTS_DIR, 'monthly', `${prevMonth}.md`);
-  const prevReport = fs.existsSync(prevReportPath) ? fs.readFileSync(prevReportPath, 'utf-8') : null;
+  const prevHasData = transactions.some(t => t.date.slice(0, 7) === prevMonth);
+  const prevData = prevHasData ? await buildMonthData(transactions, prevMonth) : null;
 
   const prompt = `${getUserContext()}
 
@@ -72,7 +73,11 @@ ${data.loans.length ? data.loans.map(t => `- ${t.date}: ${t.description} ₪${t.
 ### Split Payments (friend reimbursements from Bit/PayBox screenshots)
 ${data.splits.length ? data.splits.map(s => `- ${s.date}: ${s.merchant || 'unknown'} — friend paid back ₪${s.adjustment}`).join('\n') + `\n**Total reimbursed via splits: ₪${data.splitsTotal}** (reduce this from living expenses for net cost)` : 'No split payment records this month'}
 
-${prevReport ? `### Previous Month Report (${prevMonth}) — for comparison\n${prevReport.substring(0, 3000)}` : '### Previous month report: not available'}
+${prevData ? `### Previous Month (${prevMonth}) — computed from data, for comparison
+- Income: ₪${prevData.income.total.toLocaleString()} (salary ₪${prevData.income.salary.toLocaleString()}, freelance ₪${prevData.income.freelance.toLocaleString()})
+- Living expenses: ₪${Math.abs(prevData.expenses.living).toLocaleString()}
+- Savings: ₪${Math.abs(prevData.savings).toLocaleString()}
+- Surplus/Deficit: ₪${prevData.surplus.toLocaleString()}` : `### Previous month (${prevMonth}): no data available`}
 
 ## Task
 Generate a monthly financial report in Hebrew.
