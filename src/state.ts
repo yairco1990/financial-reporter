@@ -37,6 +37,15 @@ export interface AppConfig {
     to?: string;
   };
   portfolio?: { bank?: string };
+  /** Fixed/known expenses that aren't captured as ordinary transactions. */
+  expenses?: {
+    /**
+     * Monthly rent paid in cash via ATM. When set, each month gets a fixed
+     * rent expense of this amount, and ATM withdrawals >= this are split so the
+     * amount beyond rent counts as electricity (per the user's cash rule).
+     */
+    monthlyRentIls?: number;
+  };
 }
 
 let cachedConfig: AppConfig | null = null;

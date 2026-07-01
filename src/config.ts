@@ -41,6 +41,11 @@ export function getPortfolioBank(): string | undefined {
   return loadConfig().portfolio?.bank;
 }
 
+/** Fixed monthly rent (cash via ATM), in ILS. 0 when not configured. */
+export function getMonthlyRent(): number {
+  return loadConfig().expenses?.monthlyRentIls || 0;
+}
+
 export function getEmailConfig() {
   return loadConfig().email || {};
 }

@@ -14,6 +14,34 @@ import { Transaction, CategoryTotal, MerchantTotal } from './types';
 import { classifyTransaction, classifyWithLLM } from './classifier';
 import { callModel } from './ai-model';
 import { getSplitAdjustments } from './scrapers/splits';
+import { getMonthlyRent } from './config';
+
+/**
+ * Rent is paid in cash via ATM but is a fixed monthly obligation. When a rent
+ * amount is configured, replace raw ATM withdrawals with: a fixed rent expense
+ * for the month, plus the portion of each rent-sized withdrawal beyond rent as
+ * electricity. Withdrawals smaller than rent stay as ordinary cash.
+ * (No-op — returns the ATM txns unchanged — when rent isn't configured.)
+ */
+function applyRentFromCash(atmTxns: Transaction[], month: string): Transaction[] {
+  const rent = getMonthlyRent();
+  if (rent <= 0) return atmTxns;
+
+  const out: Transaction[] = [{
+    source: 'קבוע', date: `${month}-01`, description: 'שכר דירה (מזומן)',
+    amount: -rent, category: 'שכר דירה', memo: '', status: 'completed',
+  }];
+  for (const t of atmTxns) {
+    const amt = Math.abs(t.amount);
+    if (amt >= rent) {
+      const excess = amt - rent; // beyond rent on a rent withdrawal = electricity
+      if (excess > 0) out.push({ ...t, amount: -excess, category: 'חשמל' });
+    } else {
+      out.push(t); // unrelated cash — count as-is
+    }
+  }
+  return out;
+}
 
 // --- Helpers ---
 
@@ -117,8 +145,9 @@ export async function buildMonthData(transactions: Transaction[], month: string)
   }
   const get = (key: string) => classified[key] || [];
 
-  // --- Living expenses ---
-  const livingExpenses = [...get('living').filter(t => t.amount < 0), ...get('donation'), ...get('atm')];
+  // --- Living expenses (rent-from-cash applied to ATM when configured) ---
+  const cashExpenses = applyRentFromCash(get('atm'), month);
+  const livingExpenses = [...get('living').filter(t => t.amount < 0), ...get('donation'), ...cashExpenses];
 
   const categoryTotals = getCategoryTotals(livingExpenses);
   const merchantTotals = getMerchantTotals(livingExpenses);
