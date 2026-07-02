@@ -72,10 +72,13 @@ export async function callModel(prompt: string): Promise<string> {
       return await callWithRetry(async () => {
         const openai = createOpenAI({ apiKey: ai.openaiApiKey! });
         const { text } = await generateText({
-          model: openai(openaiModel),
+          // Use the Responses API (correct max_output_tokens handling for gpt-5.x
+          // reasoning models; the chat path sends the rejected 'max_tokens').
+          model: openai.responses(openaiModel),
           prompt,
           maxOutputTokens: 32768,
-          providerOptions: { openai: { reasoningEffort: 'minimal' } },
+          // 'low' is accepted by both gpt-5 and gpt-5.5 (gpt-5.5 dropped 'minimal').
+          providerOptions: { openai: { reasoningEffort: 'low' } },
         });
         lastModelUsed = `OpenAI ${openaiModel}`;
         return text;
