@@ -23,22 +23,32 @@ import { getMonthlyRent } from './config';
  * electricity. Withdrawals smaller than rent stay as ordinary cash.
  * (No-op — returns the ATM txns unchanged — when rent isn't configured.)
  */
-function applyRentFromCash(atmTxns: Transaction[], month: string): Transaction[] {
+function applyRentFromCash(atmTxns: Transaction[], month: string, fixedRent: boolean): Transaction[] {
   const rent = getMonthlyRent();
   if (rent <= 0) return atmTxns;
 
-  const out: Transaction[] = [{
-    source: 'קבוע', date: `${month}-01`, description: 'שכר דירה (מזומן)',
-    amount: -rent, category: 'שכר דירה', memo: '', status: 'completed',
-  }];
+  const out: Transaction[] = [];
+  if (fixedRent) {
+    // COMPLETED month: rent is a certain monthly obligation. Add it as a fixed
+    // line, and treat the rent portion of any rent-sized withdrawal as already
+    // covered (only the excess counts as electricity).
+    out.push({ source: 'קבוע', date: `${month}-01`, description: 'שכר דירה (מזומן)', amount: -rent, category: 'שכר דירה', memo: '', status: 'completed' });
+    for (const t of atmTxns) {
+      const amt = Math.abs(t.amount);
+      if (amt >= rent) { const excess = amt - rent; if (excess > 0) out.push({ ...t, amount: -excess, category: 'חשמל' }); }
+      else out.push(t); // unrelated cash — count as-is
+    }
+    return out;
+  }
+  // IN-PROGRESS month: recognize rent only once it's ACTUALLY been withdrawn,
+  // so the daily view never claims rent was paid before it was.
   for (const t of atmTxns) {
     const amt = Math.abs(t.amount);
     if (amt >= rent) {
-      const excess = amt - rent; // beyond rent on a rent withdrawal = electricity
+      out.push({ ...t, amount: -rent, category: 'שכר דירה', description: 'שכר דירה (מזומן)' });
+      const excess = amt - rent;
       if (excess > 0) out.push({ ...t, amount: -excess, category: 'חשמל' });
-    } else {
-      out.push(t); // unrelated cash — count as-is
-    }
+    } else out.push(t);
   }
   return out;
 }
@@ -125,7 +135,7 @@ function getClass(t: Transaction, classMap: Map<string, string>): string {
  * - Notable large transactions
  * - Split payment adjustments from Bit/PayBox screenshots
  */
-export async function buildMonthData(transactions: Transaction[], month: string) {
+export async function buildMonthData(transactions: Transaction[], month: string, fixedRent = true) {
   const [year, mon] = month.split('-').map(Number);
   const lastDay = new Date(year, mon, 0).getDate();
   const startDate = `${month}-01`;
@@ -146,7 +156,7 @@ export async function buildMonthData(transactions: Transaction[], month: string)
   const get = (key: string) => classified[key] || [];
 
   // --- Living expenses (rent-from-cash applied to ATM when configured) ---
-  const cashExpenses = applyRentFromCash(get('atm'), month);
+  const cashExpenses = applyRentFromCash(get('atm'), month, fixedRent);
   const livingExpenses = [...get('living').filter(t => t.amount < 0), ...get('donation'), ...cashExpenses];
 
   const categoryTotals = getCategoryTotals(livingExpenses);
@@ -273,8 +283,11 @@ export async function buildDailyData(transactions: Transaction[], today: string)
     }));
 
   // Full month summaries
-  const monthData = await buildMonthData(transactions, currentMonth);
-  const prevData = await buildMonthData(transactions, prevMonth);
+  // Current month is in progress → don't inject the fixed rent as "already
+  // spent" (recognize it only if actually withdrawn). Previous month is
+  // complete → include the fixed rent for an accurate comparison.
+  const monthData = await buildMonthData(transactions, currentMonth, false);
+  const prevData = await buildMonthData(transactions, prevMonth, true);
 
   // Previous month spending up to the same day
   const prevMonthToSameDay = filterByDate(transactions, `${prevMonth}-01`, prevMonthSameDay);
@@ -316,8 +329,21 @@ export async function buildDailyData(transactions: Transaction[], today: string)
     prevMonth: prevData,
     prevMonthToSameDayExpenses: Math.round(prevLivingToDay),
     categoryPace: pace,
-    predictedMonthEnd: monthData.expenses.living !== 0
-      ? Math.round(monthData.expenses.living / currentDay * lastDay)
-      : 0,
+    predictedMonthEnd: predictMonthEnd(monthData, currentDay, lastDay),
   };
+}
+
+/**
+ * Project end-of-month living expenses. Fixed monthly costs (rent) are NOT
+ * extrapolated — they're added once — while variable day-to-day spending is
+ * projected linearly from the run rate so far. (Multiplying a day-1 rent charge
+ * by ~31 was the old, absurd behavior.)
+ */
+function predictMonthEnd(monthData: Awaited<ReturnType<typeof buildMonthData>>, currentDay: number, lastDay: number): number {
+  const rent = getMonthlyRent();
+  const rentSoFar = (monthData.categoryBreakdown['שכר דירה'] || []).reduce((s, t) => s + t.amount, 0); // <= 0
+  const variableSoFar = monthData.expenses.living - rentSoFar; // remove rent from the run-rate base
+  if (variableSoFar === 0 && rent === 0) return 0;
+  const projectedVariable = currentDay > 0 ? variableSoFar / currentDay * lastDay : variableSoFar;
+  return Math.round(projectedVariable) - rent; // add the month's rent once
 }

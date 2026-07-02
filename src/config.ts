@@ -17,7 +17,7 @@ export const DATA_DIR = path.join(getCacheDir(), 'data');
 export const REPORTS_DIR = path.join(getCacheDir(), 'reports');
 
 // --- AI model identifiers (defaults; can be overridden via config.json) ---
-export const DEFAULT_OPENAI_MODEL = 'gpt-5';
+export const DEFAULT_OPENAI_MODEL = 'gpt-5.5';
 export const DEFAULT_CLAUDE_VERTEX_MODEL = 'claude-opus-4-6';
 export const DEFAULT_CLAUDE_DIRECT_MODEL = 'claude-opus-4-6-20250918';
 export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-pro';
