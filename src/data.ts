@@ -329,21 +329,42 @@ export async function buildDailyData(transactions: Transaction[], today: string)
     prevMonth: prevData,
     prevMonthToSameDayExpenses: Math.round(prevLivingToDay),
     categoryPace: pace,
-    predictedMonthEnd: predictMonthEnd(monthData, currentDay, lastDay),
+    predictedMonthEnd: predictMonthEnd(monthData, prevData, currentDay, lastDay),
   };
 }
 
+/** Sum of the rent-category amounts in a month (<= 0). */
+function rentComponent(m: Awaited<ReturnType<typeof buildMonthData>>): number {
+  return (m.categoryBreakdown['שכר דירה'] || []).reduce((s, t) => s + t.amount, 0);
+}
+
 /**
- * Project end-of-month living expenses. Fixed monthly costs (rent) are NOT
- * extrapolated — they're added once — while variable day-to-day spending is
- * projected linearly from the run rate so far. (Multiplying a day-1 rent charge
- * by ~31 was the old, absurd behavior.)
+ * Project end-of-month living expenses.
+ * - Fixed rent is added once (never extrapolated).
+ * - Variable spend so far + (previous month's variable daily rate × remaining
+ *   days). Anchoring the tail to last month's rate is far more stable than the
+ *   old day-1 × ~31 linear blow-up, especially early in the month.
  */
-function predictMonthEnd(monthData: Awaited<ReturnType<typeof buildMonthData>>, currentDay: number, lastDay: number): number {
+function predictMonthEnd(
+  monthData: Awaited<ReturnType<typeof buildMonthData>>,
+  prevData: Awaited<ReturnType<typeof buildMonthData>>,
+  currentDay: number,
+  lastDay: number,
+): number {
   const rent = getMonthlyRent();
-  const rentSoFar = (monthData.categoryBreakdown['שכר דירה'] || []).reduce((s, t) => s + t.amount, 0); // <= 0
-  const variableSoFar = monthData.expenses.living - rentSoFar; // remove rent from the run-rate base
-  if (variableSoFar === 0 && rent === 0) return 0;
-  const projectedVariable = currentDay > 0 ? variableSoFar / currentDay * lastDay : variableSoFar;
+  const variableSoFar = monthData.expenses.living - rentComponent(monthData); // <= 0
+  const remaining = Math.max(0, lastDay - currentDay);
+
+  let projectedVariable: number;
+  const prevVariable = prevData ? prevData.expenses.living - rentComponent(prevData) : 0;
+  if (prevVariable !== 0 && prevData) {
+    const [py, pm] = prevData.month.split('-').map(Number);
+    const prevDays = new Date(py, pm, 0).getDate();
+    projectedVariable = variableSoFar + (prevVariable / prevDays) * remaining;
+  } else {
+    // No previous month → fall back to run-rate extrapolation.
+    projectedVariable = currentDay > 0 ? variableSoFar / currentDay * lastDay : variableSoFar;
+  }
+  if (projectedVariable === 0 && rent === 0) return 0;
   return Math.round(projectedVariable) - rent; // add the month's rent once
 }
