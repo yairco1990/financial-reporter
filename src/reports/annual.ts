@@ -16,6 +16,7 @@ import { callModel, lastModelUsed } from '../ai-model';
 import { sendEmail } from '../email';
 import { renderConnectorStatusBlock } from '../connector-status';
 import { extractFragment } from './shared';
+import { formatAnnualPortfolioSection } from '../portfolio-history';
 
 export async function generateAnnualReport(transactions: Transaction[], months: string[]): Promise<void> {
   console.log(`Generating annual report: ${months[0]} — ${months[months.length - 1]}...`);
@@ -72,6 +73,8 @@ ${annualMerchants.map((m, i) => `${i + 1}. ${m.merchant}: ₪${Math.abs(m.total)
 - Total sold: ₪${monthlyData.reduce((s, d) => s + d.investment.sales, 0).toLocaleString()}
 - Total fees: ₪${Math.abs(monthlyData.reduce((s, d) => s + d.investment.fees, 0)).toLocaleString()}
 
+${formatAnnualPortfolioSection(months)}
+
 ## Task
 Generate a comprehensive annual financial report in Hebrew as HTML with inline CSS (email-safe). RTL direction. Modern clean design.
 MOBILE-FIRST: this is read mostly on a phone. Do NOT use fixed pixel widths or min-widths.
@@ -86,7 +89,7 @@ Structure:
 4. מגמות חודשיות — which months were high/low and why
 5. Top 20 ספקים — annual merchant ranking
 6. חיסכון — annual savings summary
-7. פעילות השקעות — annual investment summary
+7. פעילות השקעות — annual investment summary, plus portfolio evolution (month-end values table + change over the period, from the Investment Portfolio Evolution data above; note changes include deposits)
 8. הוצאות קבועות vs גמישות — fixed vs flexible breakdown
 9. תובנות מרכזיות — 5-7 key insights
 10. המלצות — short/medium/long term

@@ -18,6 +18,7 @@ import { sendEmail } from '../email';
 import { renderConnectorStatusBlock } from '../connector-status';
 import { renderMonthlyExpenseHistory } from './expense-history';
 import { extractFragment } from './shared';
+import { formatMonthlyPortfolioSection } from '../portfolio-history';
 
 export async function generateMonthlyReport(transactions: Transaction[], month: string, sendMail = false): Promise<void> {
   console.log(`Generating monthly report: ${month}...`);
@@ -73,6 +74,8 @@ ${data.loans.length ? data.loans.map(t => `- ${t.date}: ${t.description} ₪${t.
 ### Split Payments (friend reimbursements from Bit/PayBox screenshots)
 ${data.splits.length ? data.splits.map(s => `- ${s.date}: ${s.merchant || 'unknown'} — friend paid back ₪${s.adjustment}`).join('\n') + `\n**Total reimbursed via splits: ₪${data.splitsTotal}** (reduce this from living expenses for net cost)` : 'No split payment records this month'}
 
+${formatMonthlyPortfolioSection(month)}
+
 ${prevData ? `### Previous Month (${prevMonth}) — computed from data, for comparison
 - Income: ₪${prevData.income.total.toLocaleString()} (salary ₪${prevData.income.salary.toLocaleString()}, freelance ₪${prevData.income.freelance.toLocaleString()})
 - Living expenses: ₪${Math.abs(prevData.expenses.living).toLocaleString()}
@@ -95,9 +98,10 @@ Structure:
    is provided only so your insights are accurate.)
 3. Top 10 ספקים — merchant table with visit count
 4. פעילות השקעות — separate section for investment activity
-5. השוואה לחודש קודם — changes from previous month (if available)
-6. תובנות — 3-5 specific insights for this month
-7. המלצות — actionable tips
+5. תיק השקעות — portfolio value at month end vs previous month end, per-holding changes, YTD return (from the Investment Portfolio data above; if no stats are recorded, say so briefly). Note that value changes include deposits, not only market gains.
+6. השוואה לחודש קודם — changes from previous month (if available)
+7. תובנות — 3-5 specific insights for this month
+8. המלצות — actionable tips
 
 Keep it concise and data-driven. Every number comes from the data above — do not invent numbers.`;
 

@@ -17,6 +17,7 @@ import * as path from 'path';
 import { PortfolioData, PortfolioHolding } from '../types';
 import { getBankConfigs, getPortfolioBank, DATA_DIR } from '../config';
 import { setConnectorStatus } from '../connector-status';
+import { recordPortfolioStats } from '../portfolio-history';
 
 const PORTFOLIO_CACHE = path.join(DATA_DIR, 'portfolio.json');
 const PORTFOLIO_CONNECTOR = 'Portfolio (Telebank)';
@@ -211,6 +212,7 @@ export async function fetchPortfolio(): Promise<PortfolioData | null> {
     fs.writeFileSync(snapshotPath, JSON.stringify(portfolio, null, 2));
 
     console.log(`  ✓ Portfolio fetched: ₪${portfolio.totalValue.toLocaleString()} (${holdings.length} holdings)`);
+    recordPortfolioStats(portfolio); // append compact stats to data/portfolio-history.json
     setConnectorStatus(PORTFOLIO_CONNECTOR, 'ok', `${holdings.length} holdings`);
     return portfolio;
   } catch (err: any) {
