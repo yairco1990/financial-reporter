@@ -16,6 +16,16 @@ import { callModel } from './ai-model';
 import { getSplitAdjustments } from './scrapers/splits';
 import { getMonthlyRent } from './config';
 
+/** The rent category label used throughout expense processing. */
+const RENT_CATEGORY = 'שכר דירה';
+
+/**
+ * Categories that are fixed monthly lump sums (paid once, not spread daily), so
+ * budget pacing compares them to the full monthly amount rather than a prorated
+ * slice. Otherwise one on-time payment always reads as "above pace".
+ */
+const FIXED_CATEGORIES = new Set<string>([RENT_CATEGORY]);
+
 /**
  * Rent is paid in cash via ATM but is a fixed monthly obligation. When a rent
  * amount is configured, replace raw ATM withdrawals with: a fixed rent expense
@@ -32,7 +42,7 @@ function applyRentFromCash(atmTxns: Transaction[], month: string, fixedRent: boo
     // COMPLETED month: rent is a certain monthly obligation. Add it as a fixed
     // line, and treat the rent portion of any rent-sized withdrawal as already
     // covered (only the excess counts as electricity).
-    out.push({ source: 'קבוע', date: `${month}-01`, description: 'שכר דירה (מזומן)', amount: -rent, category: 'שכר דירה', memo: '', status: 'completed' });
+    out.push({ source: 'קבוע', date: `${month}-01`, description: 'שכר דירה (מזומן)', amount: -rent, category: RENT_CATEGORY, memo: '', status: 'completed' });
     for (const t of atmTxns) {
       const amt = Math.abs(t.amount);
       if (amt >= rent) { const excess = amt - rent; if (excess > 0) out.push({ ...t, amount: -excess, category: 'חשמל' }); }
@@ -45,7 +55,7 @@ function applyRentFromCash(atmTxns: Transaction[], month: string, fixedRent: boo
   for (const t of atmTxns) {
     const amt = Math.abs(t.amount);
     if (amt >= rent) {
-      out.push({ ...t, amount: -rent, category: 'שכר דירה', description: 'שכר דירה (מזומן)' });
+      out.push({ ...t, amount: -rent, category: RENT_CATEGORY, description: 'שכר דירה (מזומן)' });
       const excess = amt - rent;
       if (excess > 0) out.push({ ...t, amount: -excess, category: 'חשמל' });
     } else out.push(t);
@@ -306,7 +316,13 @@ export async function buildDailyData(transactions: Transaction[], today: string)
       ? Math.round((Math.abs(monthlyAvg) - Math.abs(cat.total)) / daysLeft)
       : 0;
 
-    const expectedRate = Math.abs(monthlyAvg) * (currentDay / lastDay);
+    // Fixed lump-sum categories (e.g. rent) are paid once, not spread across the
+    // month, so don't prorate — compare against the full expected monthly amount.
+    // Otherwise a single on-time payment always looks "above pace".
+    const isFixed = FIXED_CATEGORIES.has(cat.category);
+    const expectedRate = isFixed
+      ? Math.abs(monthlyAvg)
+      : Math.abs(monthlyAvg) * (currentDay / lastDay);
     const paceStatus = Math.abs(cat.total) > expectedRate * 1.15
       ? 'high'
       : Math.abs(cat.total) < expectedRate * 0.85
@@ -335,7 +351,7 @@ export async function buildDailyData(transactions: Transaction[], today: string)
 
 /** Sum of the rent-category amounts in a month (<= 0). */
 function rentComponent(m: Awaited<ReturnType<typeof buildMonthData>>): number {
-  return (m.categoryBreakdown['שכר דירה'] || []).reduce((s, t) => s + t.amount, 0);
+  return (m.categoryBreakdown[RENT_CATEGORY] || []).reduce((s, t) => s + t.amount, 0);
 }
 
 /**
