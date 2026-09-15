@@ -25,6 +25,8 @@ export interface Transaction {
   originalAmount?: number;
   /** ISO currency code of originalAmount, e.g. "HUF", "USD" (set only for foreign-currency charges) */
   originalCurrency?: string;
+  /** Installment (תשלומים) info for split payments: current payment number of a total */
+  installments?: { number: number; total: number };
 }
 
 /** Aggregated spending per category */

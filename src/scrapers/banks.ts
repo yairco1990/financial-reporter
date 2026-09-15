@@ -76,6 +76,10 @@ async function normalizeTxn(source: string, txn: any): Promise<Transaction> {
     base.originalAmount = txn.originalAmount;
     base.originalCurrency = origCurrency;
   }
+  // Installment (תשלומים) info — scraper populates this when combineInstallments:false
+  if (txn.installments && typeof txn.installments.total === 'number' && txn.installments.total > 1) {
+    base.installments = { number: txn.installments.number, total: txn.installments.total };
+  }
   return base;
 }
 

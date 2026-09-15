@@ -134,6 +134,8 @@ export async function buildDataFeed(transactions: Transaction[], portfolio: Port
         amount: Math.round(t.amount * 100) / 100,
         currency: 'ILS',
         ...(t.originalCurrency ? { originalAmount: t.originalAmount, originalCurrency: t.originalCurrency } : {}),
+        isInstallment: !!t.installments,
+        ...(t.installments ? { installments: { current: t.installments.number, total: t.installments.total, label: `${t.installments.number}/${t.installments.total}` } } : {}),
         classification: c,
         countedAs: countedAs(c, t.amount),
         newOnReportDate: t.date.slice(0, 10) === reportDate,
