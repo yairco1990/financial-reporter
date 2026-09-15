@@ -19,7 +19,6 @@ import { DATA_DIR } from './config';
 import { classifyAll } from './data';
 import { classifyTransaction } from './classifier';
 import { loadPortfolioHistory, statsAtOrBefore, PortfolioStatsEntry } from './portfolio-history';
-import { sendEmail } from './email';
 
 const CREDIT_CARD_SOURCES = new Set(['MAX', 'VisaCal', 'Isracard', 'max', 'visaCal', 'isracard']);
 const BANK_SOURCES = new Set(['Mercantile', 'Hapoalim', 'Discount', 'mercantile', 'hapoalim', 'discount']);
@@ -162,8 +161,12 @@ export async function buildDataFeed(transactions: Transaction[], portfolio: Port
   };
 }
 
-/** Build the feed, write it to the state repo, and email it as a JSON attachment. */
-export async function emitDataFeed(transactions: Transaction[], portfolio: PortfolioData | null, dailyData: any, reportDate: string): Promise<void> {
+/**
+ * Build the feed, write it to the state repo (data/feed/<date>.json, committed
+ * by the workflow), and return the JSON + filename so the caller can attach it
+ * to the daily report email. Does NOT send email itself.
+ */
+export async function buildAndSaveDataFeed(transactions: Transaction[], portfolio: PortfolioData | null, dailyData: any, reportDate: string): Promise<{ json: string; filename: string }> {
   const feed = await buildDataFeed(transactions, portfolio, dailyData, reportDate);
   const json = JSON.stringify(feed, null, 2);
 
@@ -172,15 +175,5 @@ export async function emitDataFeed(transactions: Transaction[], portfolio: Portf
   fs.writeFileSync(path.join(dir, `${reportDate}.json`), json);
   console.log(`  Data feed written: feed/${reportDate}.json (${feed.transactions.length} txns)`);
 
-  const pf = feed.portfolio;
-  const pfLine = pf
-    ? `Portfolio ₪${pf.totalValue.toLocaleString()} — MTD value ${pf.monthToDate ? (pf.monthToDate.valueChange >= 0 ? '+' : '') + '₪' + pf.monthToDate.valueChange.toLocaleString() : 'n/a'}, of which market ${pf.monthToDate ? (pf.monthToDate.marketChange >= 0 ? '+' : '') + '₪' + pf.monthToDate.marketChange.toLocaleString() : 'n/a'} (rest = deposits).`
-    : 'Portfolio: not available.';
-  const body = `<p>Machine-readable financial data feed (for your assistant) — <b>${reportDate}</b>.</p>
-<p>${feed.transactions.length} transactions, each classified by source and budget treatment. ${pfLine}</p>
-<p>Full structured data is attached as JSON, and also committed to the state repo at <code>data/feed/${reportDate}.json</code>.</p>`;
-
-  await sendEmail(`Financial Data Feed — ${reportDate}`, body, [
-    { filename: `financial-data-${reportDate}.json`, content: json, contentType: 'application/json' },
-  ]);
+  return { json, filename: `financial-data-${reportDate}.json` };
 }

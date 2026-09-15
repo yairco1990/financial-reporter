@@ -18,12 +18,12 @@ import { Transaction, PortfolioData } from '../types';
 import { REPORTS_DIR, getUserContext } from '../config';
 import { buildDailyData } from '../data';
 import { callModel, lastModelUsed } from '../ai-model';
-import { sendEmail } from '../email';
+import { sendEmail, EmailAttachment } from '../email';
 import { formatPortfolioSection } from '../scrapers/portfolio';
 import { renderConnectorStatusBlock } from '../connector-status';
 import { renderExpenseHistory } from './expense-history';
 import { extractFragment } from './shared';
-import { emitDataFeed } from '../data-feed';
+import { buildAndSaveDataFeed } from '../data-feed';
 
 export async function generateDailyReport(transactions: Transaction[], portfolio: PortfolioData | null): Promise<void> {
   // The job runs at 1 AM Jerusalem time, so we report on yesterday
@@ -111,13 +111,16 @@ Keep it SHORT and actionable — this is a daily email, not a full report.`;
   fs.writeFileSync(htmlPath, html);
   console.log(`  Saved: daily/${yesterday}.md (model: ${lastModelUsed})`);
 
-  await sendEmail(`סיכום יומי — ${yesterday}`, html);
-
-  // Machine-readable data feed (JSON) for downstream agents — additive, alongside
-  // the human HTML email. A feed failure must not affect the report/email above.
+  // Build the machine-readable data feed (JSON) and attach it to the single
+  // report email, so your assistant gets the full structured data in the same
+  // message. A feed failure must not block the report/email.
+  let attachments: EmailAttachment[] | undefined;
   try {
-    await emitDataFeed(transactions, portfolio, data, yesterday);
+    const feed = await buildAndSaveDataFeed(transactions, portfolio, data, yesterday);
+    attachments = [{ filename: feed.filename, content: feed.json, contentType: 'application/json' }];
   } catch (err: any) {
     console.warn(`  ⚠ Data feed failed (report/email unaffected): ${err.message}`);
   }
+
+  await sendEmail(`סיכום יומי — ${yesterday}`, html, attachments);
 }
