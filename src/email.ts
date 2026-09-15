@@ -6,7 +6,13 @@
 import * as nodemailer from 'nodemailer';
 import { getEmailConfig } from './config';
 
-export async function sendEmail(subject: string, htmlBody: string): Promise<void> {
+export interface EmailAttachment {
+  filename: string;
+  content: string;
+  contentType?: string;
+}
+
+export async function sendEmail(subject: string, htmlBody: string, attachments?: EmailAttachment[]): Promise<void> {
   const cfg = getEmailConfig();
   if (!cfg.gmailAppPassword || !cfg.from || !cfg.to) {
     console.log('  Email config incomplete (gmailAppPassword/from/to), skipping email');
@@ -24,6 +30,7 @@ export async function sendEmail(subject: string, htmlBody: string): Promise<void
       to: cfg.to,
       subject,
       html: wrapResponsive(htmlBody),
+      attachments,
     });
     console.log('  Email sent');
   } finally {

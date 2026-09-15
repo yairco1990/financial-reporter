@@ -102,7 +102,7 @@ export function getMerchantTotals(txns: Transaction[], limit = 15): MerchantTota
  * Classify all transactions, using LLM for any that rules can't match.
  * Returns a map of transaction description → category.
  */
-async function classifyAll(txns: Transaction[]): Promise<Map<string, string>> {
+export async function classifyAll(txns: Transaction[]): Promise<Map<string, string>> {
   const classificationMap = new Map<string, string>();
   const unclassified: Transaction[] = [];
 

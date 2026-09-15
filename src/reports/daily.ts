@@ -23,6 +23,7 @@ import { formatPortfolioSection } from '../scrapers/portfolio';
 import { renderConnectorStatusBlock } from '../connector-status';
 import { renderExpenseHistory } from './expense-history';
 import { extractFragment } from './shared';
+import { emitDataFeed } from '../data-feed';
 
 export async function generateDailyReport(transactions: Transaction[], portfolio: PortfolioData | null): Promise<void> {
   // The job runs at 1 AM Jerusalem time, so we report on yesterday
@@ -111,4 +112,12 @@ Keep it SHORT and actionable — this is a daily email, not a full report.`;
   console.log(`  Saved: daily/${yesterday}.md (model: ${lastModelUsed})`);
 
   await sendEmail(`סיכום יומי — ${yesterday}`, html);
+
+  // Machine-readable data feed (JSON) for downstream agents — additive, alongside
+  // the human HTML email. A feed failure must not affect the report/email above.
+  try {
+    await emitDataFeed(transactions, portfolio, data, yesterday);
+  } catch (err: any) {
+    console.warn(`  ⚠ Data feed failed (report/email unaffected): ${err.message}`);
+  }
 }
